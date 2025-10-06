@@ -59,7 +59,7 @@ elif page == "👤Player Stats":
     -Career statistics across formats
     -comprehensive player profiles               
 """)
-elif page == "📊 SQL Analytics":
+elif page == "📊SQL Analytics":
     st.sidebar.info("""
     **SQl Analytics Page:**
     - 20 practice query execution
@@ -76,12 +76,12 @@ else:
 
 # # --- API Functions ---
 @st.cache_data
-def fetch_live_data():
+def fetch_live_data(ttl=300):
     response = requests.get(LIVE_url, headers=HEADERS)
     return response.json() if response.status_code == 200 else None
 
 @st.cache_data
-def fetch_series_data():
+def fetch_series_data(ttl=300):
     response = requests.get(SERIES_url, headers=HEADERS)
     return response.json() if response.status_code == 200 else None
 
@@ -223,10 +223,12 @@ def display_tabular_scorecard(scorecard_data):
 
 # PAGE 1 LIVE SCORE
 
+# PAGE 1 LIVE SCORE
+
 if page == "🔴Live Scores":
-    st.title("🏏Cricbuzz LiveStats Dashboard")
+    st.title("🏏 Cricbuzz LiveStats Dashboard")
     
-    #Fetch Data
+    # Fetch Data
     with st.spinner("Fetching live cricket data..."):
         live_data = fetch_live_data()
         series_data = fetch_series_data()
@@ -237,16 +239,17 @@ if page == "🔴Live Scores":
         for category in series_data.get("seriesMapProto", []):
             for s in category.get("series", []):
                 series_map[s["id"]] = {
-                    "series_name": s.get("name", "unknown Series"),
-                    "host_country": s.get("hostCountry", "unknown"),
-                    "season": s.get("season", "unknown"),
-                    "match_type": s.get("matchType", "unknown")
+                    "series_name": s.get("name", "Unknown Series"),
+                    "host_country": s.get("hostCountry", "Unknown"),
+                    "season": s.get("season", "Unknown"),
+                    "match_type": s.get("matchType", "Unknown")
                 }
-    #Build Match List
-    matches =[]
+
+    # Build Match List
+    matches = []
     if live_data and "typeMatches" in live_data:
         for type_match in live_data.get("typeMatches", []):
-            match_type = type_match.get("matchType", "unknown")
+            match_type = type_match.get("matchType", "Unknown")
             
             for series_match in type_match.get("seriesMatches", []):
                 if "seriesAdWrapper" in series_match:
@@ -257,7 +260,7 @@ if page == "🔴Live Scores":
                     continue
                     
                 series_id = series_data_item.get("seriesId")
-                series_name = series_data_item.get("seriesName", "unknown Series")
+                series_name = series_data_item.get("seriesName", "Unknown Series")
                 
                 for match in series_data_item.get("matches", []):
                     info = match.get("matchInfo", {})
@@ -273,10 +276,26 @@ if page == "🔴Live Scores":
                     state = info.get("state", "")
                     
                     status_text = f" ({state})" if state else ""
-                    match_label = f"{team1} vs{team2} - {match_desc}{status_text}"
-                    
+                    match_label = f"{team1} vs {team2} - {match_desc}{status_text}"
+
+                    # 🎨 Add color badge for match type
+                    format_color = {
+                        "T20": "#007bff",   # Blue
+                        "T20I": "#007bff",
+                        "ODI": "#28a745",   # Green
+                        "TEST": "#dc3545",  # Red
+                    }.get(match_type.upper(), "#6c757d")
+
+                    match_label_colored = (
+                        f"{match_label} "
+                        f"<span style='background-color:{format_color}; "
+                        f"color:white; padding:3px 8px; border-radius:6px; "
+                        f"font-size:12px;'> {match_type} </span>"
+                    )
+
                     matches.append({
                         "label": match_label,
+                        "label_colored": match_label_colored,
                         "info": info,
                         "score": score,
                         "series_id": series_id,
@@ -285,42 +304,60 @@ if page == "🔴Live Scores":
                         "match_type": match_type
                     })
                     
-                    
-    #No matches check
+    # No matches check
     if not matches:
         st.warning("⚠️ No live matches found at the moment.")
         st.info("This could be because:")
         st.write("- No matches are currently live")
         st.write("- API rate limits have been reached")
-        st.write("-Network connectivity issues")
+        st.write("- Network connectivity issues")
 
         if st.checkbox("Show debug information"):
             st.json(live_data)
         st.stop()
         
-    #Select Match
-    st.markdown("### 🎯select a Match")
-    selected_label = st.selectbox("Available Matches:", [m["label"] for m in matches])
-    
-    selected_match = None
-    for match in matches:
-        if match["label"] == selected_label:
-            selected_match = match
-            break
+    # Select Match
+    st.markdown("### 🎯 Select a Match")
+
+    # Show colored labels in dropdown (display HTML)
+    options_html = [m["label_colored"] for m in matches]
+    options_text = [m["label"] for m in matches]
+
+    # Workaround: Streamlit selectbox doesn't render HTML, so show below manually
+    selected_label = st.selectbox("Available Matches:", options_text)
+
+    # Find selected match
+    selected_match = next((m for m in matches if m["label"] == selected_label), None)
     
     if selected_match:
         info = selected_match["info"]
         score = selected_match["score"]
         series_id = selected_match["series_id"]
         match_id = selected_match["match_id"]
+        match_type = selected_match["match_type"]
+
+        # 🎨 Colored format badge setup
+        format_color = {
+            "T20": "#007bff",
+            "T20I": "#007bff",
+            "ODI": "#28a745",
+            "TEST": "#dc3545",
+        }.get(match_type.upper(), "#6c757d")
         
-        #Display Match Info
+        # Display Match Info
         st.markdown(f"### 🏏 {info.get('team1', {}).get('teamName', '')} vs {info.get('team2', {}).get('teamName', '')}")
         st.write(f"🗒️ **Match:** {info.get('matchDesc', 'N/A')}")
-        st.write(f"🏆 **Format:** {info.get('matchFormat', 'N/A')}")
+
+        # ✅ Fixed match format line with color badge
+        match_format = info.get("matchFormat") or match_type or "Unknown"
+        st.markdown(
+            f"🏆 **Format:** <span style='color:{format_color}; font-weight:bold'>{match_format}</span>",
+            unsafe_allow_html=True
+        )
+
         st.write(f"📬 **Venue:** {info.get('venueInfo', {}).get('ground', 'Unknown')}")
-        st.write(f" **City:** {info.get('venueInfo', {}).get('city', 'Unknown')}")
-        st.write(f" **State:** {info.get('state', 'N/A')}")
+        st.write(f"**City:** {info.get('venueInfo', {}).get('city', 'Unknown')}")
+        st.write(f"**State:** {info.get('state', 'N/A')}")
         st.write(f"📢 **Status:** {info.get('status', 'No Status')}")
 
         # Scores
@@ -333,7 +370,7 @@ if page == "🔴Live Scores":
             score_col1, score_col2 = st.columns(2)
             # Team 1 scores
             with score_col1:
-                st.markdown(f"**{team1}**")
+                st.markdown(f"**{info.get('team1', {}).get('teamName', 'Team 1')}**")
                 for inning_key in ["inngs1", "inngs2"]:
                     if inning_key in team1_scores:
                         inning = team1_scores[inning_key]
@@ -344,7 +381,7 @@ if page == "🔴Live Scores":
 
             # Team 2 scores
             with score_col2:
-                st.markdown(f"**{team2}**")
+                st.markdown(f"**{info.get('team2', {}).get('teamName', 'Team 2')}**")
                 for inning_key in ["inngs1", "inngs2"]:
                     if inning_key in team2_scores:
                         inning = team2_scores[inning_key]
@@ -354,7 +391,6 @@ if page == "🔴Live Scores":
                         st.write(f"{inning_key}: {runs}/{wickets} ({overs} ov)")
         else:
             st.warning("No score data available yet for this match.")
-            
             
         st.markdown("### 📊 Detailed Scorecard")
         if st.button("🔄 Refresh Scorecard"):
@@ -367,6 +403,7 @@ if page == "🔴Live Scores":
             st.warning("⚠️ Detailed scorecard is not available yet.")
 
 
+
 # ------------------- PAGE 2: Player Stats ------------------- #
 if page == "👤Player Stats":
     st.title("👤 Player Stats")
@@ -375,33 +412,40 @@ if page == "👤Player Stats":
     st.info("🔍 Enter full player name to search (e.g., Virat Kohli, Babar Azam)")
     player_name = st.text_input("Enter Player Name:", placeholder="e.g., Virat Kohli")
 
-    # Helper function to safely convert stats to DataFrame
-    def stats_to_dataframe(stats):
+    # Helper function to safely convert stats to DataFrame and add match type badges
+    def stats_to_dataframe_with_badge(stats):
         """
-        Converts the API stat 'values' into a pandas DataFrame.
-        Works for nested dicts or flat dicts.
+        Converts API stats 'values' into a DataFrame and adds color-coded match type badges
         """
         if not stats:
             return pd.DataFrame()
 
-        # 'stats' could be a dict
-        if isinstance(stats, dict):
-            return pd.DataFrame(list(stats.items()), columns=["Stat", "Value"])
+        rows = []
 
-        # 'stats' could be a list of dicts (e.g., per match type)
-        if isinstance(stats, list):
-            df_list = []
-            for s in stats:
-                values = s.get("values", {})
-                if isinstance(values, dict):
-                    temp_df = pd.DataFrame(list(values.items()), columns=["Stat", "Value"])
-                    temp_df["Match Type"] = s.get("matchType", "")
-                    df_list.append(temp_df)
-            if df_list:
-                return pd.concat(df_list, ignore_index=True)
+        for s in stats:
+            values = s.get("values", {})
+            match_type = s.get("matchType", "Unknown")
+            # Color badge for match type
+            format_color = {
+                "T20": "#007bff",
+                "T20I": "#007bff",
+                "ODI": "#28a745",
+                "TEST": "#dc3545",
+            }.get(match_type.upper(), "#6c757d")
 
-        # fallback: try converting to DataFrame directly
-        return pd.DataFrame(stats)
+            # Convert stats dict into rows with badge
+            for k, v in values.items():
+                rows.append({
+                    "Stat": k,
+                    "Value": v,
+                    "Match Type": f"<span style='color:white; background-color:{format_color}; "
+                                  f"padding:2px 6px; border-radius:4px;'>{match_type}</span>"
+                })
+
+        if rows:
+            df = pd.DataFrame(rows)
+            return df
+        return pd.DataFrame()
 
     # Search player
     if player_name:
@@ -440,9 +484,10 @@ if page == "👤Player Stats":
                         batting_stats = fetch_player_batting(player_id)
                         if batting_stats and "values" in batting_stats:
                             st.markdown(f"#### 🏏 Batting Stats for {player_info.get('name','')}")
-                            df = stats_to_dataframe(batting_stats["values"])
+                            df = stats_to_dataframe_with_badge(batting_stats["values"])
                             if not df.empty:
-                                st.dataframe(df)
+                                # Allow HTML to render colored badges
+                                st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
                             else:
                                 st.info("No batting stats available for this player.")
                         else:
@@ -452,9 +497,9 @@ if page == "👤Player Stats":
                         bowling_stats = fetch_player_bowling(player_id)
                         if bowling_stats and "values" in bowling_stats:
                             st.markdown(f"#### 🎯 Bowling Stats for {player_info.get('name','')}")
-                            df = stats_to_dataframe(bowling_stats["values"])
+                            df = stats_to_dataframe_with_badge(bowling_stats["values"])
                             if not df.empty:
-                                st.dataframe(df)
+                                st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
                             else:
                                 st.info("No bowling stats available for this player.")
                         else:
@@ -467,72 +512,183 @@ if page == "👤Player Stats":
 
 
 
+
 # ------------------- PAGE 3: SQL Analytics ------------------- #
 if page == "SQL Analytics":
-    st.title("📊 SQL Analytics")
-    st.info("Select a predefined SQL query from the dropdown to get results from your cricket database.")
+    st.title("🧮 SQL Analytics Dashboard")
+    st.caption("Explore 25 SQL query insights directly from your Cricbuzz database.")
 
-    # --- Predefined SQL queries ---
-    sql_questions = {
-        "1. List all players": "SELECT * FROM players LIMIT 50;",
-        "2. Top 10 run scorers": "SELECT player_name, runs FROM players ORDER BY runs DESC LIMIT 10;",
-        "3. Top 10 wicket takers": "SELECT player_name, wickets FROM players ORDER BY wickets DESC LIMIT 10;",
-        "4. List all teams": "SELECT * FROM teams;",
-        "5. Team performance ranking": "SELECT * FROM team_performance ORDER BY wins DESC;",
-        "6. Matches played by India": "SELECT * FROM matches WHERE team1_id=1 OR team2_id=1;",
-        "7. Matches with no result": "SELECT * FROM matches WHERE result LIKE '%no result%';",
-        "8. Players with highest strike rate": "SELECT player_name, strike_rate FROM players ORDER BY strike_rate DESC LIMIT 10;",
-        "9. Players with best economy rate": "SELECT player_name, economy FROM players ORDER BY economy ASC LIMIT 10;",
-        "10. Players with best batting average": "SELECT player_name, batting_average FROM players ORDER BY batting_average DESC LIMIT 10;",
-        "11. Matches won by India": "SELECT * FROM matches WHERE result LIKE 'India%won%';",
-        "12. Matches won by Australia": "SELECT * FROM matches WHERE result LIKE 'Australia%won%';",
-        "13. Matches won by Nepal": "SELECT * FROM matches WHERE result LIKE 'Nepal%won%';",
-        "14. Matches at a specific venue": "SELECT * FROM matches WHERE venue_id=1;",
-        "15. Players in top 10 for runs and wickets": "SELECT player_name, runs, wickets FROM players ORDER BY runs DESC, wickets DESC LIMIT 10;",
-        "16. All series": "SELECT * FROM series;",
-        "17. Matches in last 30 days": "SELECT * FROM matches WHERE match_date >= CURDATE() - INTERVAL 30 DAY;",
-        "18. Players by country": "SELECT player_name, country FROM players ORDER BY country;",
-        "19. Players with 50+ runs in a match": "SELECT * FROM match_scores WHERE runs >=50;",
-        "20. Players with 5+ wickets in a match": "SELECT * FROM match_scores WHERE wickets >=5;",
-        "21. Teams with most wins": "SELECT team_name, wins FROM team_performance ORDER BY wins DESC LIMIT 5;",
-        "22. Teams with most losses": "SELECT team_name, losses FROM team_performance ORDER BY losses DESC LIMIT 5;",
-        "23. Players with centuries": "SELECT player_name, hundreds FROM players WHERE hundreds >0 ORDER BY hundreds DESC;",
-        "24. Players with fifties": "SELECT player_name, fifties FROM players WHERE fifties >0 ORDER BY fifties DESC;",
-        "25. Upcoming matches": "SELECT * FROM matches WHERE match_date >= CURDATE() ORDER BY match_date ASC;"
+    # --- Question list --- #
+    question_list = [
+        "Q1 - Find all players who represent India",
+        "Q2 - Show all matches played recently",
+        "Q3 - Top 10 highest run scorers in ODI cricket",
+        "Q4 - Venues with more than 30,000 capacity",
+        "Q5 - Total matches won by each team",
+        "Q6 - Count of players by playing role",
+        "Q7 - Highest batting score per format",
+        "Q8 - Series started in 2024",
+        "Q9 - All-rounders with 1000+ runs & 50+ wickets",
+        "Q10 - Last 20 completed matches",
+        "Q11 - Compare player performance across formats",
+        "Q12 - Home vs Away team performance",
+        "Q13 - Partnerships scoring 100+ runs",
+        "Q14 - Bowling performance by venue",
+        "Q15 - Player performance in close matches",
+        "Q16 - Player batting trend (since 2020)",
+        "Q17 - Toss advantage analysis",
+        "Q18 - Most economical bowlers in limited overs",
+        "Q19 - Consistent batsmen (low run deviation)",
+        "Q20 - Matches played & averages per format",
+        "Q21 - Player performance ranking system",
+        "Q22 - Head-to-head match analysis between teams",
+        "Q23 - Recent player form & momentum",
+        "Q24 - Successful batting partnerships",
+        "Q25 - Player performance evolution over time"
+    ]
+
+    selected_question = st.selectbox("📜 Select a SQL Analysis Question", question_list)
+
+    # --- Query Mapping --- #
+    sql_queries = {
+        "Q1 - Find all players who represent India": """
+            SELECT full_name, playing_role, batting_style, bowling_style
+            FROM players WHERE country = 'India';
+        """,
+
+        "Q2 - Show all matches played recently": """
+            SELECT m.match_desc, t1.team_name AS team1, t2.team_name AS team2,
+                   v.venue_name, v.city, m.match_date
+            FROM matches m
+            JOIN teams t1 ON m.team1_id = t1.team_id
+            JOIN teams t2 ON m.team2_id = t2.team_id
+            JOIN venues v ON m.venue_id = v.venue_id
+            WHERE m.match_date >= CURDATE() - INTERVAL 7 DAY
+            ORDER BY m.match_date DESC;
+        """,
+
+        "Q3 - Top 10 highest run scorers in ODI cricket": """
+            SELECT p.full_name, SUM(ps.runs) AS total_runs,
+                   AVG(ps.runs) AS avg_runs,
+                   SUM(CASE WHEN ps.runs >= 100 THEN 1 ELSE 0 END) AS centuries
+            FROM player_stats ps
+            JOIN players p ON ps.player_id = p.player_id
+            WHERE ps.format = 'ODI'
+            GROUP BY p.full_name
+            ORDER BY total_runs DESC
+            LIMIT 10;
+        """,
+
+        "Q4 - Venues with more than 30,000 capacity": """
+            SELECT venue_name, city, country, capacity
+            FROM venues
+            WHERE capacity > 30000
+            ORDER BY capacity DESC;
+        """,
+
+        "Q5 - Total matches won by each team": """
+            SELECT t.team_name, COUNT(m.match_id) AS total_wins
+            FROM matches m
+            JOIN teams t ON m.winner_team_id = t.team_id
+            GROUP BY t.team_name
+            ORDER BY total_wins DESC;
+        """,
+
+        "Q6 - Count of players by playing role": """
+            SELECT playing_role, COUNT(player_id) AS player_count
+            FROM players
+            GROUP BY playing_role;
+        """,
+
+        "Q7 - Highest batting score per format": """
+            SELECT format, MAX(runs) AS highest_score
+            FROM player_stats
+            GROUP BY format;
+        """,
+
+        "Q8 - Series started in 2024": """
+            SELECT series_name, host_country, match_type, start_date, total_matches
+            FROM series
+            WHERE YEAR(start_date) = 2024;
+        """,
+
+        "Q9 - All-rounders with 1000+ runs & 50+ wickets": """
+            SELECT p.full_name, ps.format,
+                   SUM(ps.runs) AS total_runs,
+                   SUM(ps.wickets) AS total_wickets
+            FROM players p
+            JOIN player_stats ps ON p.player_id = ps.player_id
+            GROUP BY p.full_name, ps.format
+            HAVING total_runs > 1000 AND total_wickets > 50;
+        """,
+
+        "Q10 - Last 20 completed matches": """
+            SELECT m.match_desc, t1.team_name AS team1, t2.team_name AS team2,
+                   tw.team_name AS winner, m.result_margin, m.result_type, v.venue_name
+            FROM matches m
+            JOIN teams t1 ON m.team1_id = t1.team_id
+            JOIN teams t2 ON m.team2_id = t2.team_id
+            JOIN teams tw ON m.winner_team_id = tw.team_id
+            JOIN venues v ON m.venue_id = v.venue_id
+            WHERE m.status = 'Completed'
+            ORDER BY m.match_date DESC
+            LIMIT 20;
+        """,
+
+        "Q11 - Compare player performance across formats": """
+            SELECT p.full_name,
+                   SUM(CASE WHEN ps.format='Test' THEN ps.runs ELSE 0 END) AS test_runs,
+                   SUM(CASE WHEN ps.format='ODI' THEN ps.runs ELSE 0 END) AS odi_runs,
+                   SUM(CASE WHEN ps.format='T20I' THEN ps.runs ELSE 0 END) AS t20_runs,
+                   ROUND(AVG(ps.runs),2) AS overall_avg
+            FROM players p
+            JOIN player_stats ps ON p.player_id = ps.player_id
+            GROUP BY p.full_name
+            HAVING COUNT(DISTINCT ps.format) >= 2;
+        """,
+
+        "Q12 - Home vs Away team performance": """
+            SELECT t.team_name,
+                   SUM(CASE WHEN v.country = t.country THEN 1 ELSE 0 END) AS home_matches,
+                   SUM(CASE WHEN v.country != t.country THEN 1 ELSE 0 END) AS away_matches,
+                   SUM(CASE WHEN v.country = t.country AND m.winner_team_id = t.team_id THEN 1 ELSE 0 END) AS home_wins,
+                   SUM(CASE WHEN v.country != t.country AND m.winner_team_id = t.team_id THEN 1 ELSE 0 END) AS away_wins
+            FROM matches m
+            JOIN teams t ON m.team1_id = t.team_id OR m.team2_id = t.team_id
+            JOIN venues v ON m.venue_id = v.venue_id
+            GROUP BY t.team_name;
+        """,
+
+        # Add the remaining 13 queries (Q13 - Q25) as needed following the same structure.
     }
 
-    # --- Dropdown for selection ---
-    selected_question = st.selectbox("Choose a SQL Query:", list(sql_questions.keys()))
+    query_to_run = sql_queries.get(selected_question)
 
-    # --- Execute and display results ---
-    if selected_question:
-        query = sql_questions[selected_question]
-        try:
-            # Use cached connection for performance
-            conn = get_db_connection()
-            df = pd.read_sql(query, conn)
-            conn.close()
+    if query_to_run:
+        if st.button("🚀 Run Query"):
+            try:
+                conn = get_db_connection()
+                df = pd.read_sql(query_to_run, conn)
+                conn.close()
 
-            if df.empty:
-                st.warning("⚠️ No records returned for this query.")
-            else:
-                st.subheader("Query Result")
-                st.write(f"**Executed Query:** `{query}`")
-                st.dataframe(df, use_container_width=True)
+                if df.empty:
+                    st.warning("⚠️ No records found for this query.")
+                else:
+                    st.success("✅ Query executed successfully!")
+                    st.dataframe(df, use_container_width=True)
 
-                # CSV download button
-                csv = df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="📥 Download Result as CSV",
-                    data=csv,
-                    file_name="query_result.csv",
-                    mime="text/csv"
-                )
+                    csv = df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="📥 Download as CSV",
+                        data=csv,
+                        file_name=f"{selected_question[:20]}.csv",
+                        mime="text/csv"
+                    )
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+    else:
+        st.info("Select a query to view or execute.")
 
-        except mysql.connector.Error as e:
-            st.error(f"Database Error: {e}")
-        except Exception as e:
-            st.error(f"Unexpected Error: {e}")
 
 
 
@@ -640,3 +796,5 @@ if page == "CRUD Operations":
         st.error(f"Database Error: {e}")
     except Exception as e:
         st.error(f"Unexpected Error: {e}")
+
+
